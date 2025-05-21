@@ -44,11 +44,48 @@
             padding: 5px 10px;
             cursor: pointer;
         }
+        .ticket-box {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .ticket-count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-right: 10px;
+        }
+        .ticket-detail {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
     </style>
 </head>
 <body>
     <h2>내 태스크 참여/면제</h2>
-    <p>잔여 티켓: <b>{{ remain }}</b></p>
+    
+    <div class="ticket-box">
+        <h3>잔여 티켓 <span class="ticket-count">{{ remain }}</span></h3>
+        
+        {% if grant_tickets %}
+        <p>부여받은 티켓 사유:</p>
+        <div class="ticket-detail">
+            <ul>
+                {% for ticket in grant_tickets %}
+                <li>
+                    <strong>{{ ticket.created_at.strftime('%Y/%m/%d') }}</strong> - 
+                    {{ ticket.reason }} (부여자: {{ ticket.created_by }})
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
     
     <h3>응답 대기 중인 태스크</h3>
     {% if assignments %}
@@ -75,7 +112,7 @@
                     <button type="submit" class="btn-exempt">티켓 사용(면제)</button>
                 </form>
                 {% else %}
-                <span>(잔여 티켓 없음)</span>
+                <span>(잔여 티켓 없음 - 자동으로 태스크가 수락됩니다)</span>
                 {% endif %}
             </td>
         </tr>

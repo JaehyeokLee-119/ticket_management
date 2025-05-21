@@ -108,7 +108,11 @@ def my_ticket():
     revoke = sum(1 for t in tickets if t.type == 'revoke')
     use = sum(1 for t in tickets if t.type == 'use')
     remain = grant - revoke - use
-    return render_template('ticket_my.html', tickets=tickets, remain=remain)
+    
+    # 부여된 티켓 정보 수집
+    grant_tickets = [t for t in tickets if t.type == 'grant']
+    
+    return render_template('ticket_my.html', tickets=tickets, remain=remain, grant_tickets=grant_tickets)
 
 # 관리자: 태스크 관리 페이지
 @app.route('/task/manage', methods=['GET', 'POST'])
@@ -216,13 +220,16 @@ def task_execute(task_id):
             flash('이미 필요한 인원이 모두 선정되었습니다.')
             return redirect(url_for('task_manage'))
             
-        # 이미 선정된 사용자 ID 목록 (면제된 사용자 포함)
+        # 이미 선정된 사용자 ID 목록 (현재 active한 사용자만, 면제된 사용자는 제외)
         already_selected_ids = [
             assignment.user_id for assignment in 
-            TaskAssignment.query.filter_by(task_id=task.id).all()
+            TaskAssignment.query.filter(
+                TaskAssignment.task_id == task.id,
+                TaskAssignment.status.in_(['selected', 'accepted'])
+            ).all()
         ]
         
-        # 아직 선정되지 않은 후보자 목록
+        # 후보자 목록 (면제된 사용자도 다시 선정될 수 있음)
         available_candidates = [
             c.user for c in task.candidates 
             if c.user.id not in already_selected_ids
@@ -234,12 +241,45 @@ def task_execute(task_id):
         
         # 추가 인원 랜덤 선정
         additional_selected = random.sample(available_candidates, additional_needed)
+        auto_accepted = 0  # 자동으로 수락된 사용자 수
+        
         for user in additional_selected:
-            assignment = TaskAssignment(task_id=task.id, user_id=user.id, status='selected')
-            db.session.add(assignment)
+            # 이미 이 태스크에 대해 면제된 기록이 있는지 확인
+            existing_exempt = TaskAssignment.query.filter_by(
+                task_id=task.id, 
+                user_id=user.id,
+                status='exempted'
+            ).first()
+            
+            # 사용자의 잔여 티켓 수 계산
+            tickets = Ticket.query.filter_by(user_id=user.id).all()
+            grant = sum(1 for t in tickets if t.type == 'grant')
+            revoke = sum(1 for t in tickets if t.type == 'revoke')
+            use = sum(1 for t in tickets if t.type == 'use')
+            remain = grant - revoke - use
+            
+            # 상태 설정 (티켓이 없으면 자동으로 accepted)
+            status = 'selected' if remain > 0 else 'accepted'
+            
+            if existing_exempt:
+                # 이미 면제된 적이 있던 사용자는 기존 레코드를 업데이트
+                existing_exempt.status = status
+                if status == 'accepted':
+                    auto_accepted += 1
+                flash(f'{user.name}님이 다시 선정되었습니다. (이전에 면제됨)')
+            else:
+                # 새로운 선정
+                assignment = TaskAssignment(task_id=task.id, user_id=user.id, status=status)
+                if status == 'accepted':
+                    auto_accepted += 1
+                db.session.add(assignment)
         
         db.session.commit()
-        flash(f'추가 인원 {additional_needed}명이 선정되었습니다.')
+        
+        if auto_accepted > 0:
+            flash(f'추가 인원 {additional_needed}명이 선정되었습니다. (이 중 {auto_accepted}명은 티켓이 없어 자동 수락됨)')
+        else:
+            flash(f'추가 인원 {additional_needed}명이 선정되었습니다.')
         return redirect(url_for('task_manage'))
     
     # 처음 실행하는 경우 (status == 'pending')
@@ -249,13 +289,31 @@ def task_execute(task_id):
         return redirect(url_for('task_manage'))
     
     selected = random.sample(candidates, task.required_count)
+    auto_accepted = 0  # 자동으로 수락된 사용자 수
+    
     for user in selected:
-        assignment = TaskAssignment(task_id=task.id, user_id=user.id, status='selected')
+        # 사용자의 잔여 티켓 수 계산
+        tickets = Ticket.query.filter_by(user_id=user.id).all()
+        grant = sum(1 for t in tickets if t.type == 'grant')
+        revoke = sum(1 for t in tickets if t.type == 'revoke')
+        use = sum(1 for t in tickets if t.type == 'use')
+        remain = grant - revoke - use
+        
+        # 상태 설정 (티켓이 없으면 자동으로 accepted)
+        status = 'selected' if remain > 0 else 'accepted'
+        if status == 'accepted':
+            auto_accepted += 1
+            
+        assignment = TaskAssignment(task_id=task.id, user_id=user.id, status=status)
         db.session.add(assignment)
     
     task.status = 'completed'
     db.session.commit()
-    flash('태스크가 실행되어 인원이 선정되었습니다.')
+    
+    if auto_accepted > 0:
+        flash(f'태스크가 실행되어 {task.required_count}명이 선정되었습니다. (이 중 {auto_accepted}명은 티켓이 없어 자동 수락됨)')
+    else:
+        flash('태스크가 실행되어 인원이 선정되었습니다.')
     return redirect(url_for('task_manage'))
 
 # 사용자: 태스크 참여/면제
@@ -280,6 +338,9 @@ def my_tasks():
     revoke = sum(1 for t in tickets if t.type == 'revoke')
     use = sum(1 for t in tickets if t.type == 'use')
     remain = grant - revoke - use
+    
+    # 부여된 티켓 정보 수집
+    grant_tickets = [t for t in tickets if t.type == 'grant']
     
     if request.method == 'POST':
         assignment_id = request.form['assignment_id']
@@ -308,9 +369,10 @@ def my_tasks():
         return redirect(url_for('my_tasks'))
     
     return render_template('task_my.html', 
-                          assignments=assignments, 
-                          completed_assignments=completed_assignments,
-                          remain=remain)
+                           assignments=assignments, 
+                           completed_assignments=completed_assignments,
+                           remain=remain,
+                           grant_tickets=grant_tickets)
 
 @app.route('/test')
 def test():

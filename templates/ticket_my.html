@@ -3,21 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <title>내 티켓 현황</title>
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .ticket-box {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        .ticket-count {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+            margin-right: 10px;
+        }
+        .ticket-detail {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .grant {
+            color: #4CAF50;
+        }
+        .revoke {
+            color: #f44336;
+        }
+        .use {
+            color: #ff9800;
+        }
+    </style>
 </head>
 <body>
     <h2>내 티켓 현황</h2>
-    <p>잔여 티켓: <b>{{ remain }}</b></p>
-    <h3>티켓 이력</h3>
-    <table border="1">
+    
+    <div class="ticket-box">
+        <h3>잔여 티켓 <span class="ticket-count">{{ remain }}</span></h3>
+        
+        {% if grant_tickets %}
+        <p>부여받은 티켓 사유:</p>
+        <div class="ticket-detail">
+            <ul>
+                {% for ticket in grant_tickets %}
+                <li>
+                    <strong>{{ ticket.created_at.strftime('%Y/%m/%d') }}</strong> - 
+                    {{ ticket.reason }} (부여자: {{ ticket.created_by }})
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    
+    <h3>티켓 전체 이력</h3>
+    <table>
         <tr>
             <th>동작</th><th>사유</th><th>부여자</th><th>일시</th>
         </tr>
         {% for ticket in tickets %}
         <tr>
-            <td>{{ '부여' if ticket.type == 'grant' else '회수' if ticket.type == 'revoke' else '사용' }}</td>
+            <td class="{% if ticket.type == 'grant' %}grant{% elif ticket.type == 'revoke' %}revoke{% else %}use{% endif %}">
+                {{ '부여' if ticket.type == 'grant' else '회수' if ticket.type == 'revoke' else '사용' }}
+            </td>
             <td>{{ ticket.reason }}</td>
             <td>{{ ticket.created_by }}</td>
-            <td>{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ ticket.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
         </tr>
         {% endfor %}
     </table>
