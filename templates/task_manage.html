@@ -2,116 +2,276 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>태스크 관리</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
     <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
         }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #ddd;
+        .card-header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            font-weight: bold;
         }
-        th {
-            background-color: #f2f2f2;
+        .table th {
+            background-color: #e9ecef;
+            font-weight: bold;
         }
-        .selected-users {
-            margin-top: 10px;
-            padding: 8px;
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
+        .create-task-form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .badge-pending {
+            background-color: #6c757d;
+        }
+        .badge-progress {
+            background-color: #ffc107;
+        }
+        .badge-completed {
+            background-color: #28a745;
+        }
+        .badge-need-reselection {
+            background-color: #dc3545;
         }
         .exempted {
-            color: #ff6600;
+            color: #fd7e14;
             font-weight: bold;
         }
         .pending {
-            color: #0066cc;
+            color: #0d6efd;
             font-style: italic;
         }
         .accepted {
-            color: #008800;
+            color: #198754;
             font-weight: bold;
+        }
+        .auto-accepted {
+            color: #9932cc;
+        }
+        .selected-users {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 10px;
+        }
+        .selected-users ul {
+            list-style-type: none;
+            padding-left: 10px;
+        }
+        .selected-users ul li {
+            padding: 5px 0;
+            border-bottom: 1px dotted #dee2e6;
+        }
+        .task-action-btn {
+            min-width: 100px;
         }
     </style>
 </head>
 <body>
-    <h2>태스크 관리 (관리자)</h2>
-    <form method="POST">
-        <label for="title">태스크명:</label>
-        <input type="text" name="title" id="title" required>
-        <label for="description">설명:</label>
-        <input type="text" name="description" id="description">
-        <label for="required_count">필요 인원수:</label>
-        <input type="number" name="required_count" id="required_count" min="1" required>
-        <label>후보자 선택:</label><br>
-        {% for user in users %}
-            <input type="checkbox" name="candidates" value="{{ user.id }}"> {{ user.name }} ({{ user.email }})<br>
-        {% endfor %}
-        <button type="submit">태스크 생성</button>
-    </form>
-    <h3>태스크 목록</h3>
-    <table>
-        <tr>
-            <th>태스크명</th><th>설명</th><th>필요 인원수</th><th>생성자</th><th>상태</th><th>후보자</th><th>생성일시</th><th>실행</th>
-        </tr>
-        {% for task in tasks %}
-        <tr>
-            <td>{{ task.title }}</td>
-            <td>{{ task.description }}</td>
-            <td>{{ task.required_count }}</td>
-            <td>{{ task.created_by }}</td>
-            <td>
-                {% if task.status == 'completed' and task.id in task_statuses %}
-                    <span style="color: {% if task_statuses[task.id] == '완료' %}green{% elif '추가 선정 필요' in task_statuses[task.id] %}red{% else %}orange{% endif %};">
-                        {{ task_statuses[task.id] }}
-                    </span>
-                {% else %}
-                    {{ task.status }}
-                {% endif %}
-            </td>
-            <td>
-                {% for c in task.candidates %}
-                    {{ c.user.name }}{% if not loop.last %}, {% endif %}
-                {% endfor %}
-            </td>
-            <td>{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td>
-                {% if task.status == 'pending' %}
-                    <a href="/task/execute/{{ task.id }}">실행</a>
-                {% elif task.id in needs_reselection %}
-                    <a href="/task/execute/{{ task.id }}">추가 선정</a>
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-        </tr>
-        {% if task.status == 'completed' and task.id in task_results %}
-        <tr>
-            <td colspan="8">
-                <div class="selected-users">
-                    <strong>선정 결과:</strong>
-                    <ul>
-                        {% for user in task_results[task.id] %}
-                            <li class="{% if user.status == '면제됨' %}exempted{% elif user.status == '응답 대기 중' %}pending{% elif user.status == '수락됨' %}accepted{% endif %}">
-                                {{ user.name }} - {{ user.status }}
-                                {% if user.ticket_used %}
-                                    (티켓 사용)
-                                {% endif %}
-                                {% if user.reason %}
-                                    [{{ user.reason }}]
-                                {% endif %}
-                            </li>
-                        {% endfor %}
-                    </ul>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0"><i class="bi bi-kanban"></i> 태스크 관리 (관리자)</h2>
+            <a href="/dashboard" class="btn btn-outline-secondary"><i class="bi bi-house-door"></i> 대시보드로</a>
+        </div>
+
+        <!-- 플래시 메시지 표시 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show mb-4" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="card create-task-form">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-plus-circle"></i> 새 태스크 생성
+            </div>
+            <div class="card-body">
+                <form method="POST" class="row g-3">
+                    <div class="col-md-6">
+                        <label for="title" class="form-label">태스크명:</label>
+                        <input type="text" name="title" id="title" class="form-control" required value="{{ title or '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="description" class="form-label">설명:</label>
+                        <input type="text" name="description" id="description" class="form-control" value="{{ description or '' }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="required_count" class="form-label">필요 인원수:</label>
+                        <input type="number" name="required_count" id="required_count" class="form-control" min="1" required value="{{ required_count or 1 }}">
+                    </div>
+                    <div class="col-md-9">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label mb-0">후보자 선택: <span class="badge bg-info">일반 사용자만 표시됨</span></label>
+                            <div>
+                                <button type="button" id="selectAllBtn" class="btn btn-sm btn-outline-primary">모두 선택</button>
+                                <button type="button" id="deselectAllBtn" class="btn btn-sm btn-outline-secondary">모두 해제</button>
+                            </div>
+                        </div>
+                        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2 border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                            {% for user in users %}
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input user-checkbox" type="checkbox" name="candidates" value="{{ user.id }}" id="user-{{ user.id }}" 
+                                    {% if selected_candidates and user.id|string in selected_candidates %}checked
+                                    {% elif selected_candidates is not defined %}checked{% endif %}>
+                                    <label class="form-check-label" for="user-{{ user.id }}">
+                                        {{ user.name }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-text mt-1">후보자 수는 반드시 필요 인원수 이상이어야 합니다.</div>
+                    </div>
+                    <div class="col-12 text-end">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle"></i> 태스크 생성</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-list-task"></i> 태스크 목록
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr class="table-light">
+                                <th>태스크명</th>
+                                <th>설명</th>
+                                <th>필요 인원</th>
+                                <th>생성자</th>
+                                <th>상태</th>
+                                <th>후보자</th>
+                                <th>생성일시</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            <tr>
+                                <td class="fw-bold">{{ task.title }}</td>
+                                <td>{{ task.description }}</td>
+                                <td class="text-center">{{ task.required_count }}</td>
+                                <td>{{ task.created_by }}</td>
+                                <td>
+                                    {% if task.status == 'completed' and task.id in task_statuses %}
+                                        {% if task_statuses[task.id] == '완료' %}
+                                            <span class="badge rounded-pill badge-completed">{{ task_statuses[task.id] }}</span>
+                                        {% elif '추가 선정 필요' in task_statuses[task.id] %}
+                                            <span class="badge rounded-pill badge-need-reselection">{{ task_statuses[task.id] }}</span>
+                                        {% else %}
+                                            <span class="badge rounded-pill badge-progress">{{ task_statuses[task.id] }}</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge rounded-pill badge-pending">{{ task.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="d-inline-block text-truncate" style="max-width: 150px;" data-bs-toggle="tooltip" data-bs-placement="top" title="{% for c in task.candidates %}{{ c.user.name }}{% if not loop.last %}, {% endif %}{% endfor %}">
+                                        {% for c in task.candidates %}{{ c.user.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+                                    </span>
+                                </td>
+                                <td>{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if task.status == 'pending' %}
+                                        <a href="/task/execute/{{ task.id }}" class="btn btn-sm btn-success task-action-btn">
+                                            <i class="bi bi-play-fill"></i> 실행
+                                        </a>
+                                    {% elif task.id in needs_reselection %}
+                                        <a href="/task/execute/{{ task.id }}" class="btn btn-sm btn-warning task-action-btn">
+                                            <i class="bi bi-arrow-repeat"></i> 추가 선정
+                                        </a>
+                                    {% else %}
+                                        <button disabled class="btn btn-sm btn-secondary task-action-btn">
+                                            <i class="bi bi-check-circle"></i> 완료됨
+                                        </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if task.status == 'completed' and task.id in task_results %}
+                            <tr>
+                                <td colspan="8">
+                                    <div class="selected-users">
+                                        <h6 class="fw-bold mb-3">
+                                            <i class="bi bi-person-check"></i> 선정 결과:
+                                        </h6>
+                                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-2">
+                                            {% for user in task_results[task.id] %}
+                                                <div class="col">
+                                                    <div class="card h-100 border-0 shadow-sm">
+                                                        <div class="card-body p-2">
+                                                            <h6 class="card-title {% if user.status == '면제됨' %}exempted{% elif user.status == '응답 대기 중' %}pending{% elif user.status == '수락됨' %}accepted{% endif %}">
+                                                                <i class="bi {% if user.status == '면제됨' %}bi-slash-circle{% elif user.status == '응답 대기 중' %}bi-hourglass-split{% elif user.status == '수락됨' %}bi-check-circle{% endif %}"></i>
+                                                                {{ user.name }}
+                                                            </h6>
+                                                            <div class="card-text">
+                                                                <span class="badge {% if user.status == '면제됨' %}bg-warning{% elif user.status == '응답 대기 중' %}bg-info{% elif user.status == '수락됨' %}bg-success{% endif %}">
+                                                                    {{ user.status }}
+                                                                </span>
+                                                                {% if user.ticket_used %}
+                                                                    <span class="badge bg-secondary">티켓 사용</span>
+                                                                {% endif %}
+                                                                {% if user.reason %}
+                                                                    <div class="mt-1 small text-muted">{{ user.reason }}</div>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
-            </td>
-        </tr>
-        {% endif %}
-        {% endfor %}
-    </table>
-    <p><a href="/dashboard">대시보드로</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 툴팁 초기화
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+
+        // 체크박스 전체 선택/해제 기능
+        document.getElementById('selectAllBtn').addEventListener('click', function() {
+            document.querySelectorAll('.user-checkbox').forEach(function(checkbox) {
+                checkbox.checked = true;
+            });
+        });
+
+        document.getElementById('deselectAllBtn').addEventListener('click', function() {
+            document.querySelectorAll('.user-checkbox').forEach(function(checkbox) {
+                checkbox.checked = false;
+            });
+        });
+    </script>
 </body>
 </html> 

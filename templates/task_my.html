@@ -2,151 +2,224 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>태스크 참여/면제</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
     <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
-        }
-        th, td {
-            padding: 8px;
-            text-align: left;
-            border: 1px solid #ddd;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        .accepted {
-            color: #008800;
-            font-weight: bold;
-        }
-        .exempted {
-            color: #ff6600;
-            font-weight: bold;
-        }
-        .waiting {
-            color: #0066cc;
-            font-style: italic;
-        }
-        .btn-accept {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            margin-right: 5px;
-            cursor: pointer;
-        }
-        .btn-exempt {
-            background-color: #f44336;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            cursor: pointer;
-        }
-        .ticket-box {
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
         }
         .ticket-count {
-            font-size: 24px;
+            font-size: 2rem;
             font-weight: bold;
-            color: #4CAF50;
-            margin-right: 10px;
         }
-        .ticket-detail {
-            margin-top: 10px;
-            padding: 8px;
-            background-color: #fff;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        .task-accepted {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .task-exempted {
+            color: #fd7e14;
+            font-weight: bold;
+        }
+        .task-waiting {
+            color: #0d6efd;
+            font-style: italic;
+        }
+        .ticket-use {
+            color: #0d6efd;
+            font-style: italic;
         }
     </style>
 </head>
 <body>
-    <h2>내 태스크 참여/면제</h2>
-    
-    <div class="ticket-box">
-        <h3>잔여 티켓 <span class="ticket-count">{{ remain }}</span></h3>
-        
-        {% if grant_tickets %}
-        <p>부여받은 티켓 사유:</p>
-        <div class="ticket-detail">
-            <ul>
-                {% for ticket in grant_tickets %}
-                <li>
-                    <strong>{{ ticket.created_at.strftime('%Y/%m/%d') }}</strong> - 
-                    {{ ticket.reason }} (부여자: {{ ticket.created_by }})
-                </li>
-                {% endfor %}
-            </ul>
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0"><i class="bi bi-list-task"></i> 태스크 참여/면제</h2>
+            <a href="/dashboard" class="btn btn-outline-secondary"><i class="bi bi-house-door"></i> 대시보드로</a>
         </div>
-        {% endif %}
+        
+        <!-- 플래시 메시지 표시 -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show mb-4" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+        
+        <!-- 티켓 요약 정보 -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-info-circle"></i> 티켓 정보
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center mb-3">
+                    <div class="col-md-4 text-center">
+                        <div class="ticket-count text-{% if remain > 0 %}success{% else %}secondary{% endif %}">
+                            {{ remain }}
+                        </div>
+                        <div class="text-muted">잔여 티켓</div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card h-100 bg-light">
+                            <div class="card-body p-3">
+                                {% if grant_tickets %}
+                                <h6 class="card-subtitle mb-2 text-success">
+                                    <i class="bi bi-plus-circle"></i> 부여받은 티켓 사유
+                                </h6>
+                                <ul class="list-group list-group-flush">
+                                    {% for ticket in grant_tickets %}
+                                    <li class="list-group-item bg-transparent px-0 py-1 border-0">
+                                        <small class="text-muted">{{ ticket.created_at.strftime('%Y/%m/%d') }}</small> - 
+                                        {{ ticket.reason }} 
+                                        <span class="badge bg-light text-dark">{{ ticket.created_by }}</span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+                                
+                                {% if use_tickets %}
+                                <h6 class="card-subtitle mb-2 text-primary mt-3">
+                                    <i class="bi bi-arrow-right-circle"></i> 사용한 티켓 내역
+                                </h6>
+                                <ul class="list-group list-group-flush">
+                                    {% for ticket in use_tickets %}
+                                    <li class="list-group-item bg-transparent px-0 py-1 border-0">
+                                        <small class="text-muted">{{ ticket.created_at.strftime('%Y/%m/%d') }}</small> - 
+                                        <span class="fw-bold">
+                                        {% if 'Task ' in ticket.reason %}
+                                            태스크 "{{ ticket.reason.replace('Task ', '').replace(' 면제', '') }}" 면제
+                                        {% else %}
+                                            {{ ticket.reason }}
+                                        {% endif %}
+                                        </span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 응답 대기 중인 태스크 -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-hourglass-split"></i> 응답 대기 중인 태스크
+            </div>
+            <div class="card-body">
+                {% if assignments %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr class="table-light">
+                                <th>태스크명</th>
+                                <th>설명</th>
+                                <th>선정일시</th>
+                                <th>액션</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in assignments %}
+                            <tr>
+                                <td class="fw-bold">{{ a.task.title }}</td>
+                                <td>{{ a.task.description }}</td>
+                                <td>{{ a.assigned_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <div class="d-flex gap-2">
+                                        <form method="POST">
+                                            <input type="hidden" name="assignment_id" value="{{ a.id }}">
+                                            <input type="hidden" name="action" value="accept">
+                                            <button type="submit" class="btn btn-success btn-sm">
+                                                <i class="bi bi-check-circle"></i> 태스크 수락
+                                            </button>
+                                        </form>
+                                        
+                                        {% if remain > 0 %}
+                                        <form method="POST">
+                                            <input type="hidden" name="assignment_id" value="{{ a.id }}">
+                                            <input type="hidden" name="action" value="exempt">
+                                            <button type="submit" class="btn btn-warning btn-sm">
+                                                <i class="bi bi-ticket-perforated"></i> 티켓 사용(면제)
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <span class="badge bg-secondary align-self-center ms-2">
+                                            <i class="bi bi-info-circle"></i> 잔여 티켓 없음
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-secondary">
+                    <i class="bi bi-info-circle"></i> 응답 대기 중인 태스크가 없습니다.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- 완료된 태스크 -->
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <i class="bi bi-check2-all"></i> 완료된 태스크
+            </div>
+            <div class="card-body">
+                {% if completed_assignments %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr class="table-light">
+                                <th>태스크명</th>
+                                <th>설명</th>
+                                <th>상태</th>
+                                <th>선정일시</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for a in completed_assignments %}
+                            <tr>
+                                <td class="fw-bold">{{ a.task.title }}</td>
+                                <td>{{ a.task.description }}</td>
+                                <td>
+                                    {% if a.status == 'accepted' %}
+                                        <span class="badge bg-success"><i class="bi bi-check-circle"></i> 수락됨</span>
+                                    {% else %}
+                                        <span class="badge bg-warning"><i class="bi bi-ticket-perforated"></i> 면제됨 (티켓 사용)</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ a.assigned_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-secondary">
+                    <i class="bi bi-info-circle"></i> 완료된 태스크가 없습니다.
+                </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
     
-    <h3>응답 대기 중인 태스크</h3>
-    {% if assignments %}
-    <table>
-        <tr>
-            <th>태스크명</th><th>설명</th><th>선정일시</th><th>액션</th>
-        </tr>
-        {% for a in assignments %}
-        <tr>
-            <td>{{ a.task.title }}</td>
-            <td>{{ a.task.description }}</td>
-            <td>{{ a.assigned_at.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td>
-                <form method="POST" style="display:inline;">
-                    <input type="hidden" name="assignment_id" value="{{ a.id }}">
-                    <input type="hidden" name="action" value="accept">
-                    <button type="submit" class="btn-accept">태스크 수락</button>
-                </form>
-                
-                {% if remain > 0 %}
-                <form method="POST" style="display:inline;">
-                    <input type="hidden" name="assignment_id" value="{{ a.id }}">
-                    <input type="hidden" name="action" value="exempt">
-                    <button type="submit" class="btn-exempt">티켓 사용(면제)</button>
-                </form>
-                {% else %}
-                <span>(잔여 티켓 없음 - 자동으로 태스크가 수락됩니다)</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-    <p>응답 대기 중인 태스크가 없습니다.</p>
-    {% endif %}
-    
-    <h3>완료된 태스크</h3>
-    {% if completed_assignments %}
-    <table>
-        <tr>
-            <th>태스크명</th><th>설명</th><th>상태</th><th>선정일시</th>
-        </tr>
-        {% for a in completed_assignments %}
-        <tr>
-            <td>{{ a.task.title }}</td>
-            <td>{{ a.task.description }}</td>
-            <td class="{% if a.status == 'accepted' %}accepted{% else %}exempted{% endif %}">
-                {% if a.status == 'accepted' %}
-                    수락됨
-                {% else %}
-                    면제됨 (티켓 사용)
-                {% endif %}
-            </td>
-            <td>{{ a.assigned_at.strftime('%Y-%m-%d %H:%M') }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% else %}
-    <p>완료된 태스크가 없습니다.</p>
-    {% endif %}
-    
-    <p><a href="/dashboard">대시보드로</a></p>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html> 

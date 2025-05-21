@@ -5,6 +5,9 @@ import os
 from werkzeug.security import generate_password_hash, check_password_hash
 import random
 import logging
+import time
+import secrets  # 더 강력한 난수 생성기
+import datetime
 
 from models import db, User, Ticket, Task, TaskCandidate, TaskAssignment
 
@@ -72,7 +75,60 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html')
+    # 관리자와 일반 사용자 구분
+    if current_user.role == 'admin':
+        # 관리자는 시스템 정보만 표시
+        # 전체 사용자 수
+        users_count = User.query.filter(User.role != 'admin').count()
+        
+        # 현재 진행 중인 태스크 수
+        active_tasks = Task.query.filter_by(status='completed').all()
+        
+        # 주의가 필요한 태스크 (추가 선정이 필요한 태스크)
+        need_attention_tasks = []
+        for task in active_tasks:
+            active_assignments = TaskAssignment.query.filter(
+                TaskAssignment.task_id == task.id,
+                TaskAssignment.status.in_(['selected', 'accepted'])
+            ).count()
+            
+            if active_assignments < task.required_count:
+                need_attention_tasks.append({
+                    'task': task,
+                    'needed': task.required_count - active_assignments
+                })
+        
+        return render_template('dashboard.html',
+                              active_tasks=active_tasks,
+                              users_count=users_count,
+                              need_attention_tasks=need_attention_tasks,
+                              is_admin=True)
+    else:
+        # 일반 사용자는 개인 정보 표시
+        # 잔여 티켓 계산
+        tickets = Ticket.query.filter_by(user_id=current_user.id).all()
+        grant = sum(1 for t in tickets if t.type == 'grant')
+        revoke = sum(1 for t in tickets if t.type == 'revoke')
+        use = sum(1 for t in tickets if t.type == 'use')
+        remain = grant - revoke - use
+        
+        # 응답 대기 중인 태스크 수
+        waiting_tasks_count = TaskAssignment.query.filter_by(
+            user_id=current_user.id, 
+            status='selected'
+        ).count()
+        
+        # 최근에 완료한 태스크 (최대 3개)
+        completed_tasks = TaskAssignment.query.filter(
+            TaskAssignment.user_id == current_user.id,
+            TaskAssignment.status.in_(['accepted', 'exempted'])
+        ).order_by(TaskAssignment.assigned_at.desc()).limit(3).all()
+        
+        return render_template('dashboard.html', 
+                              remain=remain, 
+                              waiting_tasks_count=waiting_tasks_count,
+                              completed_tasks=completed_tasks,
+                              is_admin=False)
 
 # 관리자: 티켓 관리 페이지
 @app.route('/ticket/manage', methods=['GET', 'POST'])
@@ -81,22 +137,49 @@ def ticket_manage():
     if current_user.role != 'admin':
         flash('접근 권한이 없습니다.')
         return redirect(url_for('dashboard'))
-    users = User.query.all()
+    # 관리자 본인을 제외한 일반 사용자만 표시
+    users = User.query.filter(User.role != 'admin').all()
+    
+    # 각 사용자별 티켓 보유량 계산
+    user_tickets = {}
+    for user in users:
+        tickets = Ticket.query.filter_by(user_id=user.id).all()
+        grant = sum(1 for t in tickets if t.type == 'grant')
+        revoke = sum(1 for t in tickets if t.type == 'revoke')
+        use = sum(1 for t in tickets if t.type == 'use')
+        remain = grant - revoke - use
+        user_tickets[user.id] = {
+            'total': grant,
+            'used': use,
+            'revoked': revoke,
+            'remain': remain
+        }
+    
     if request.method == 'POST':
-        user_id = request.form['user_id']
+        user_ids = request.form.getlist('user_ids')
         action = request.form['action']  # grant/revoke
         reason = request.form['reason']
-        target_user = User.query.get(user_id)
-        if not target_user:
-            flash('사용자를 찾을 수 없습니다.')
+        
+        if not user_ids:
+            flash('최소 한 명 이상의 사용자를 선택해주세요.', 'error')
             return redirect(url_for('ticket_manage'))
-        ticket = Ticket(user_id=user_id, type=action, reason=reason, created_by=current_user.name)
-        db.session.add(ticket)
+        
+        success_count = 0
+        for user_id in user_ids:
+            target_user = User.query.get(user_id)
+            if target_user:
+                ticket = Ticket(user_id=user_id, type=action, reason=reason, created_by=current_user.name)
+                db.session.add(ticket)
+                success_count += 1
+        
         db.session.commit()
-        flash(f'{target_user.name}님에게 티켓 {"부여" if action=="grant" else "회수"} 완료!')
+        action_text = "부여" if action == "grant" else "회수"
+        flash(f'{success_count}명의 사용자에게 티켓 {action_text}가 완료되었습니다!', 'success')
         return redirect(url_for('ticket_manage'))
-    tickets = Ticket.query.order_by(Ticket.created_at.desc()).all()
-    return render_template('ticket_manage.html', users=users, tickets=tickets)
+    
+    # 일반 사용자에 대한 티켓 이력만 표시
+    tickets = Ticket.query.join(User).filter(User.role != 'admin').order_by(Ticket.created_at.desc()).all()
+    return render_template('ticket_manage.html', users=users, tickets=tickets, user_tickets=user_tickets)
 
 # 사용자: 내 티켓 현황/이력
 @app.route('/ticket/my')
@@ -112,7 +195,14 @@ def my_ticket():
     # 부여된 티켓 정보 수집
     grant_tickets = [t for t in tickets if t.type == 'grant']
     
-    return render_template('ticket_my.html', tickets=tickets, remain=remain, grant_tickets=grant_tickets)
+    # 사용된 티켓 정보 수집
+    use_tickets = [t for t in tickets if t.type == 'use']
+    
+    return render_template('ticket_my.html', 
+                          tickets=tickets, 
+                          remain=remain, 
+                          grant_tickets=grant_tickets,
+                          use_tickets=use_tickets)
 
 # 관리자: 태스크 관리 페이지
 @app.route('/task/manage', methods=['GET', 'POST'])
@@ -121,21 +211,8 @@ def task_manage():
     if current_user.role != 'admin':
         flash('접근 권한이 없습니다.')
         return redirect(url_for('dashboard'))
-    users = User.query.all()
-    if request.method == 'POST':
-        title = request.form['title']
-        description = request.form['description']
-        required_count = int(request.form['required_count'])
-        candidate_ids = request.form.getlist('candidates')
-        task = Task(title=title, description=description, created_by=current_user.name, required_count=required_count)
-        db.session.add(task)
-        db.session.commit()
-        for uid in candidate_ids:
-            candidate = TaskCandidate(task_id=task.id, user_id=uid)
-            db.session.add(candidate)
-        db.session.commit()
-        flash('태스크가 생성되었습니다.')
-        return redirect(url_for('task_manage'))
+    # 관리자를 제외한 일반 사용자만 후보자로 표시
+    users = User.query.filter(User.role != 'admin').all()
     
     # 태스크 목록과 각 태스크에 대한 선정 결과 조회
     tasks = Task.query.order_by(Task.created_at.desc()).all()
@@ -192,9 +269,40 @@ def task_manage():
                 # 모든 인원이 응답 완료하고 필요 인원을 충족하면 "완료"
                 task_statuses[task.id] = "완료"
     
+    # POST 요청 처리
+    if request.method == 'POST':
+        title = request.form['title']
+        description = request.form['description']
+        required_count = int(request.form['required_count'])
+        candidate_ids = request.form.getlist('candidates')
+        
+        # 선택된 후보자 수가 필요 인원수보다 적은 경우 에러 메시지 표시
+        if len(candidate_ids) < required_count:
+            flash('선택된 후보자 수가 필요 인원수보다 적습니다. 더 많은 후보자를 선택하거나 필요 인원수를 줄여주세요.', 'error')
+            return render_template('task_manage.html', 
+                                 users=users, 
+                                 tasks=tasks, 
+                                 task_results=task_results, 
+                                 task_statuses=task_statuses,
+                                 needs_reselection=needs_reselection,
+                                 title=title, 
+                                 description=description, 
+                                 required_count=required_count, 
+                                 selected_candidates=candidate_ids)
+        
+        task = Task(title=title, description=description, created_by=current_user.name, required_count=required_count)
+        db.session.add(task)
+        db.session.commit()
+        for uid in candidate_ids:
+            candidate = TaskCandidate(task_id=task.id, user_id=uid)
+            db.session.add(candidate)
+        db.session.commit()
+        flash('태스크가 생성되었습니다.', 'success')
+        return redirect(url_for('task_manage'))
+    
     return render_template('task_manage.html', users=users, tasks=tasks, 
-                           task_results=task_results, task_statuses=task_statuses,
-                           needs_reselection=needs_reselection)
+                        task_results=task_results, task_statuses=task_statuses,
+                        needs_reselection=needs_reselection)
 
 # 태스크 실행(랜덤 선정)
 @app.route('/task/execute/<int:task_id>')
@@ -342,6 +450,9 @@ def my_tasks():
     # 부여된 티켓 정보 수집
     grant_tickets = [t for t in tickets if t.type == 'grant']
     
+    # 사용된 티켓 정보 수집
+    use_tickets = [t for t in tickets if t.type == 'use']
+    
     if request.method == 'POST':
         assignment_id = request.form['assignment_id']
         action = request.form['action']  # 'accept' 또는 'exempt'
@@ -363,6 +474,76 @@ def my_tasks():
                 db.session.add(ticket)
                 db.session.commit()
                 flash(f'태스크 "{assignment.task.title}"에 대해 티켓을 사용하여 면제되었습니다.')
+                
+                # 자동으로 추가 인원 선정 진행
+                task = assignment.task
+                
+                # 현재 활성 인원 수 확인 (면제되지 않은 인원, 수락한 인원 포함)
+                active_assignments = TaskAssignment.query.filter(
+                    TaskAssignment.task_id == task.id,
+                    TaskAssignment.status.in_(['selected', 'accepted'])
+                ).count()
+                
+                # 필요한 추가 인원 수 계산
+                additional_needed = task.required_count - active_assignments
+                
+                if additional_needed > 0:
+                    # 이미 선정된 사용자 ID 목록 (현재 active한 사용자만)
+                    already_selected_ids = [
+                        a.user_id for a in 
+                        TaskAssignment.query.filter(
+                            TaskAssignment.task_id == task.id,
+                            TaskAssignment.status.in_(['selected', 'accepted'])
+                        ).all()
+                    ]
+                    
+                    # 후보자 목록 (면제된 사용자도 다시 선정될 수 있음)
+                    available_candidates = [
+                        c.user for c in task.candidates 
+                        if c.user.id not in already_selected_ids
+                    ]
+                    
+                    if len(available_candidates) >= additional_needed:
+                        # 추가 인원 랜덤 선정
+                        additional_selected = random.sample(available_candidates, additional_needed)
+                        auto_accepted = 0  # 자동으로 수락된 사용자 수
+                        
+                        for user in additional_selected:
+                            # 이미 이 태스크에 대해 면제된 기록이 있는지 확인
+                            existing_exempt = TaskAssignment.query.filter_by(
+                                task_id=task.id, 
+                                user_id=user.id,
+                                status='exempted'
+                            ).first()
+                            
+                            # 사용자의 잔여 티켓 수 계산
+                            user_tickets = Ticket.query.filter_by(user_id=user.id).all()
+                            user_grant = sum(1 for t in user_tickets if t.type == 'grant')
+                            user_revoke = sum(1 for t in user_tickets if t.type == 'revoke')
+                            user_use = sum(1 for t in user_tickets if t.type == 'use')
+                            user_remain = user_grant - user_revoke - user_use
+                            
+                            # 상태 설정 (티켓이 없으면 자동으로 accepted)
+                            status = 'selected' if user_remain > 0 else 'accepted'
+                            
+                            if existing_exempt:
+                                # 이미 면제된 적이 있던 사용자는 기존 레코드를 업데이트
+                                existing_exempt.status = status
+                                if status == 'accepted':
+                                    auto_accepted += 1
+                            else:
+                                # 새로운 선정
+                                new_assignment = TaskAssignment(task_id=task.id, user_id=user.id, status=status)
+                                if status == 'accepted':
+                                    auto_accepted += 1
+                                db.session.add(new_assignment)
+                        
+                        db.session.commit()
+                        if additional_needed == 1:
+                            flash(f'추가 인원 {additional_needed}명이 자동으로 선정되었습니다.')
+                        else:
+                            flash(f'추가 인원 {additional_needed}명이 자동으로 선정되었습니다.')
+                        
             elif action == 'exempt' and remain <= 0:
                 flash('잔여 티켓이 없습니다.')
         
@@ -372,7 +553,8 @@ def my_tasks():
                            assignments=assignments, 
                            completed_assignments=completed_assignments,
                            remain=remain,
-                           grant_tickets=grant_tickets)
+                           grant_tickets=grant_tickets,
+                           use_tickets=use_tickets)
 
 @app.route('/test')
 def test():
