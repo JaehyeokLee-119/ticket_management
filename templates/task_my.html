@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>태스크 참여/면제</title>
+</head>
+<body>
+    <h2>내 태스크 참여/면제</h2>
+    <p>잔여 티켓: <b>{{ remain }}</b></p>
+    <h3>선정된 태스크</h3>
+    <table border="1">
+        <tr>
+            <th>태스크명</th><th>설명</th><th>상태</th><th>면제</th><th>선정일시</th>
+        </tr>
+        {% for a in assignments %}
+        <tr>
+            <td>{{ a.task.title }}</td>
+            <td>{{ a.task.description }}</td>
+            <td>{{ '면제됨' if a.ticket_used else '참여' }}</td>
+            <td>
+                {% if not a.ticket_used and remain > 0 %}
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="assignment_id" value="{{ a.id }}">
+                    <button type="submit">티켓 사용(면제)</button>
+                </form>
+                {% elif a.ticket_used %}
+                    (티켓 사용)
+                {% else %}
+                    (티켓 없음)
+                {% endif %}
+            </td>
+            <td>{{ a.assigned_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p><a href="/dashboard">대시보드로</a></p>
+</body>
+</html> 

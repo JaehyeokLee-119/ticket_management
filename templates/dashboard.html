@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>대시보드</title>
+</head>
+<body>
+    <h2>대시보드</h2>
+    <p>안녕하세요, {{ current_user.name }} ({{ '관리자' if current_user.role == 'admin' else '일반 사용자' }})님!</p>
+    <ul>
+        {% if current_user.role == 'admin' %}
+            <li><a href="/ticket/manage">티켓 관리</a></li>
+            <li><a href="/task/manage">태스크 관리</a></li>
+        {% else %}
+            <li><a href="/ticket/my">내 티켓 현황</a></li>
+            <li><a href="/task/my">태스크 참여</a></li>
+        {% endif %}
+        <li><a href="/logout">로그아웃</a></li>
+    </ul>
+</body>
+</html> 

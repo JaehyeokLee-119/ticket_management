@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>태스크 관리</title>
+</head>
+<body>
+    <h2>태스크 관리 (관리자)</h2>
+    <form method="POST">
+        <label for="title">태스크명:</label>
+        <input type="text" name="title" id="title" required>
+        <label for="description">설명:</label>
+        <input type="text" name="description" id="description">
+        <label for="required_count">필요 인원수:</label>
+        <input type="number" name="required_count" id="required_count" min="1" required>
+        <label>후보자 선택:</label><br>
+        {% for user in users %}
+            <input type="checkbox" name="candidates" value="{{ user.id }}"> {{ user.name }} ({{ user.email }})<br>
+        {% endfor %}
+        <button type="submit">태스크 생성</button>
+    </form>
+    <h3>태스크 목록</h3>
+    <table border="1">
+        <tr>
+            <th>태스크명</th><th>설명</th><th>필요 인원수</th><th>생성자</th><th>상태</th><th>후보자</th><th>생성일시</th><th>실행</th>
+        </tr>
+        {% for task in tasks %}
+        <tr>
+            <td>{{ task.title }}</td>
+            <td>{{ task.description }}</td>
+            <td>{{ task.required_count }}</td>
+            <td>{{ task.created_by }}</td>
+            <td>{{ task.status }}</td>
+            <td>
+                {% for c in task.candidates %}
+                    {{ c.user.name }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </td>
+            <td>{{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+                {% if task.status == 'pending' %}
+                    <a href="/task/execute/{{ task.id }}">실행</a>
+                {% else %}
+                    완료
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p><a href="/dashboard">대시보드로</a></p>
+</body>
+</html> 

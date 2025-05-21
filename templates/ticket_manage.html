@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>티켓 관리</title>
+</head>
+<body>
+    <h2>티켓 관리 (관리자)</h2>
+    <form method="POST">
+        <label for="user_id">사용자 선택:</label>
+        <select name="user_id" id="user_id" required>
+            {% for user in users %}
+                <option value="{{ user.id }}">{{ user.name }} ({{ user.email }})</option>
+            {% endfor %}
+        </select>
+        <label for="action">동작:</label>
+        <select name="action" id="action" required>
+            <option value="grant">부여</option>
+            <option value="revoke">회수</option>
+        </select>
+        <label for="reason">사유:</label>
+        <input type="text" name="reason" id="reason" required>
+        <button type="submit">실행</button>
+    </form>
+    <h3>티켓 이력</h3>
+    <table border="1">
+        <tr>
+            <th>사용자</th><th>동작</th><th>사유</th><th>부여자</th><th>일시</th>
+        </tr>
+        {% for ticket in tickets %}
+        <tr>
+            <td>{{ ticket.user.name }}</td>
+            <td>{{ '부여' if ticket.type == 'grant' else '회수' if ticket.type == 'revoke' else ticket.type }}</td>
+            <td>{{ ticket.reason }}</td>
+            <td>{{ ticket.created_by }}</td>
+            <td>{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    <p><a href="/dashboard">대시보드로</a></p>
+</body>
+</html> 
